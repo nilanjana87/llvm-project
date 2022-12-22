@@ -16,8 +16,22 @@ import lldbsuite.test.lldbutil as lldbutil
 import os
 import unittest2
 
+from lldbsuite.test import lldbtest_config
 
 class TestSwiftUnknownSelf(lldbtest.TestBase):
+
+    def dumpSessionInfo(self):
+        import sys
+        for log_file in self.log_files:
+            print(f"Dumping {log_file}")
+            with open(log_file) as f:
+                sys.stdout.write(f.read())
+        lldbtest.TestBase.dumpSessionInfo(self)
+
+    def setUp(self):
+        lldbtest_config.channels = ["lldb types"]
+        lldbtest.TestBase.setUp(self)
+
 
     def check_class(self, var_self, broken):
         lldbutil.check_variable(self, var_self, num_children=2)
