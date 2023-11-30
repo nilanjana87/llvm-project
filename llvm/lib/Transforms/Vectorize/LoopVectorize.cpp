@@ -1252,8 +1252,10 @@ public:
   /// \return The desired interleave count.
   /// If interleave count has been specified by metadata it will be returned.
   /// Otherwise, the interleave count is computed and returned. VF and LoopCost
-  /// are the selected vectorization factor and the cost of the selected VF.
-  unsigned selectInterleaveCount(ElementCount VF, InstructionCost LoopCost);
+  /// are the selected vectorization factor and the cost of the selected VF for
+  /// loop L.
+  unsigned selectInterleaveCount(Loop *L, ElementCount VF,
+                                 InstructionCost LoopCost);
 
   /// Memory access instruction may be vectorized in more than one way.
   /// Form of instruction after vectorization depends on cost.
@@ -5621,7 +5623,7 @@ void LoopVectorizationCostModel::collectElementTypesForWidening() {
 }
 
 unsigned
-LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
+LoopVectorizationCostModel::selectInterleaveCount(Loop *L, ElementCount VF,
                                                   InstructionCost LoopCost) {
   // -- The interleave heuristics --
   // We interleave the loop in order to expose ILP and reduce the loop overhead.
@@ -5741,13 +5743,17 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
   // the InterleaveCount as if vscale is '1', although if some information about
   // the vector is known (e.g. min vector size), we can make a better decision.
   if (BestKnownTC) {
-    if (InterleaveSmallLoopScalarReduction ||
-        (*BestKnownTC % VF.getKnownMinValue() == 0))
+    unsigned EstimatedVF = VF.getKnownMinValue();
+    if (VF.isScalable()) {
+      if (std::optional<unsigned> VScale = getVScaleForTuning(L, TTI))
+        EstimatedVF *= *VScale;
+    }
+    if (InterleaveSmallLoopScalarReduction || (*BestKnownTC % EstimatedVF == 0))
       MaxInterleaveCount =
-          std::min(*BestKnownTC / VF.getKnownMinValue(), MaxInterleaveCount);
+          std::min(*BestKnownTC / EstimatedVF, MaxInterleaveCount);
     else
-      MaxInterleaveCount = std::min(*BestKnownTC / (VF.getKnownMinValue() * 2),
-                                    MaxInterleaveCount);
+      MaxInterleaveCount =
+          std::min(*BestKnownTC / (EstimatedVF * 2), MaxInterleaveCount);
     // Make sure MaxInterleaveCount is greater than 0 & a power of 2.
     MaxInterleaveCount = llvm::bit_floor(std::max(1u, MaxInterleaveCount));
   }
@@ -10166,7 +10172,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
   if (MaybeVF) {
     VF = *MaybeVF;
     // Select the interleave count.
-    IC = CM.selectInterleaveCount(VF.Width, VF.Cost);
+    IC = CM.selectInterleaveCount(L, VF.Width, VF.Cost);
 
     unsigned SelectedIC = std::max(IC, UserIC);
     //  Optimistically generate runtime checks if they are needed. Drop them if
