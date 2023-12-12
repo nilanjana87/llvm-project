@@ -3932,6 +3932,11 @@ public:
                                               APValue &Value, CCEKind CCE,
                                               NamedDecl *Dest = nullptr);
 
+  ExprResult
+  EvaluateConvertedConstantExpression(Expr *E, QualType T, APValue &Value,
+                                      CCEKind CCE, bool RequireInt,
+                                      const APValue &PreNarrowingValue);
+
   /// Abstract base class used to perform a contextual implicit
   /// conversion from an expression to any type passing a filter.
   class ContextualImplicitConverter {
@@ -8556,6 +8561,10 @@ public:
                                      TemplateParameterList *Params,
                                      TemplateArgumentLoc &Arg);
 
+  void NoteTemplateLocation(const NamedDecl &Decl,
+                            std::optional<SourceRange> ParamRange = {});
+  void NoteTemplateParameterLocation(const NamedDecl &Decl);
+
   ExprResult
   BuildExpressionFromDeclTemplateArgument(const TemplateArgument &Arg,
                                           QualType ParamType,
@@ -11013,6 +11022,11 @@ public:
   /// ActOnPragmaFenvAccess - Called on well formed
   /// \#pragma STDC FENV_ACCESS
   void ActOnPragmaFEnvAccess(SourceLocation Loc, bool IsEnabled);
+
+  /// ActOnPragmaCXLimitedRange - Called on well formed
+  /// \#pragma STDC CX_LIMITED_RANGE
+  void ActOnPragmaCXLimitedRange(SourceLocation Loc,
+                                 LangOptions::ComplexRangeKind Range);
 
   /// Called on well formed '\#pragma clang fp' that has option 'exceptions'.
   void ActOnPragmaFPExceptions(SourceLocation Loc,
@@ -13836,6 +13850,8 @@ private:
                                     CallExpr *TheCall);
   bool CheckMVEBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckSVEBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
+  bool ParseSVEImmChecks(CallExpr *TheCall,
+                         SmallVector<std::tuple<int, int, int>, 3> &ImmChecks);
   bool CheckCDEBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                                    CallExpr *TheCall);
   bool CheckARMCoprocessorImmediate(const TargetInfo &TI, const Expr *CoprocArg,
